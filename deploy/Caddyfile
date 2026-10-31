@@ -1,0 +1,24 @@
+# Caddy on the Mac mini: HTTPS for your domain, proxied to the Node API.
+# Replace api.example.com with your real subdomain (A record -> the Mac's public IP).
+# Install: brew install caddy   Run: sudo caddy run --config deploy/Caddyfile  (or brew services, see server/README.md)
+
+api.example.com {
+	encode zstd gzip
+
+	# API, uploaded menu photos and Socket.IO (WebSockets are proxied automatically)
+	reverse_proxy 127.0.0.1:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# create the folder first: mkdir -p /opt/homebrew/var/log/caddy
+	log {
+		output file /opt/homebrew/var/log/caddy/canteen-access.log {
+			roll_size 10mb
+			roll_keep 10
+		}
+	}
+}
