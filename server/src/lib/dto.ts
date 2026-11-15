@@ -30,6 +30,7 @@ export const comboDto = (c: typeof combos.$inferSelect, parts: { menuItemId: num
 export const userDto = (u: typeof users.$inferSelect) => ({
   id: u.id,
   phone: u.phone,
+  email: u.email,
   name: u.name,
   rollNo: u.rollNo,
   role: u.role,

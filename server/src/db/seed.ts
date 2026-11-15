@@ -2,7 +2,8 @@
 // Safe to run more than once. Replace the menu with the real canteen menu from the admin dashboard.
 import { eq } from 'drizzle-orm';
 import { db, pool } from './index.js';
-import { categories, comboItems, combos, menuItems, settings } from './schema.js';
+import { categories, comboItems, combos, menuItems, settings, users } from './schema.js';
+import { hashPassword } from '../lib/password.js';
 import { DEFAULT_SETTINGS } from '../lib/settings.js';
 
 const rs = (rupees: number) => Math.round(rupees * 100);
@@ -72,8 +73,21 @@ export async function seed() {
   }
 }
 
+/** Creates the first console admin from ADMIN_EMAIL + ADMIN_PASSWORD (no-op if unset or the email exists). */
+export async function bootstrapAdmin() {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) return;
+  if (password.length < 8) throw new Error('ADMIN_PASSWORD must be at least 8 characters');
+  const [exists] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+  if (exists) return;
+  await db.insert(users).values({ email, passwordHash: await hashPassword(password), name: 'Canteen Admin', role: 'admin' });
+  console.log(`Created admin ${email}`);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   await seed();
+  await bootstrapAdmin();
   console.log('Seed complete');
   await pool.end();
 }

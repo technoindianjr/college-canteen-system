@@ -252,3 +252,59 @@ describe('admin', () => {
     expect(r.body.feedback.avgRating).toBe(5);
   });
 });
+
+describe('staff email/password login', () => {
+  const EMAIL = 'counter@example.com';
+  const PASSWORD = 'correct-horse-battery';
+  const post = (url: string, body: unknown, who?: string) => call('POST', url, who, body);
+
+  it('admin creates a staff account that can log in and use staff routes', async () => {
+    const created = await post('/admin/users/staff', { email: EMAIL, password: PASSWORD, name: 'Counter One' }, ADMIN);
+    expect(created.status).toBe(201);
+    expect(created.body.role).toBe('staff');
+    expect(created.body.email).toBe(EMAIL);
+    expect(created.body.phone).toBeNull();
+
+    const login = await post('/auth/password-login', { email: 'Counter@Example.com', password: PASSWORD });
+    expect(login.status).toBe(200);
+    tokens[EMAIL] = login.body.token;
+    expect((await call('GET', '/staff/orders?scope=open', EMAIL)).status).toBe(200);
+    expect((await call('GET', '/admin/users', EMAIL)).status).toBe(403);
+  });
+
+  it('rejects duplicates, wrong passwords and unknown emails with the same message', async () => {
+    expect((await post('/admin/users/staff', { email: EMAIL, password: PASSWORD, name: 'Dup' }, ADMIN)).status).toBe(409);
+    const wrong = await post('/auth/password-login', { email: EMAIL, password: 'nope-nope-nope' });
+    const unknown = await post('/auth/password-login', { email: 'ghost@example.com', password: PASSWORD });
+    expect(wrong.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    expect(wrong.body.message).toBe(unknown.body.message);
+  });
+
+  it('refuses students, blocked staff, and non-admins creating accounts', async () => {
+    const student = await post('/admin/users/staff', { email: 'kid@example.com', password: PASSWORD, name: 'Kid', role: 'staff' }, ADMIN);
+    await call('PATCH', `/admin/users/${student.body.id}`, ADMIN, { role: 'student' });
+    expect((await post('/auth/password-login', { email: 'kid@example.com', password: PASSWORD })).status).toBe(403);
+
+    const staff = await call('GET', `/admin/users?q=${EMAIL}`, ADMIN);
+    const id = staff.body[0].id;
+    await call('PATCH', `/admin/users/${id}`, ADMIN, { isBlocked: true });
+    expect((await post('/auth/password-login', { email: EMAIL, password: PASSWORD })).status).toBe(403);
+    await call('PATCH', `/admin/users/${id}`, ADMIN, { isBlocked: false });
+
+    expect((await post('/admin/users/staff', { email: 'x@example.com', password: PASSWORD, name: 'X' }, ALICE)).status).toBe(403);
+  });
+
+  it('admin can reset the password', async () => {
+    const id = (await call('GET', `/admin/users?q=${EMAIL}`, ADMIN)).body[0].id;
+    expect((await call('PATCH', `/admin/users/${id}`, ADMIN, { password: 'brand-new-password' })).status).toBe(200);
+    expect((await post('/auth/password-login', { email: EMAIL, password: PASSWORD })).status).toBe(401);
+    expect((await post('/auth/password-login', { email: EMAIL, password: 'brand-new-password' })).status).toBe(200);
+  });
+
+  it('rate limits repeated failures', async () => {
+    let last = 0;
+    for (let i = 0; i < 7; i++) last = (await post('/auth/password-login', { email: 'brute@example.com', password: 'x' + i })).status;
+    expect(last).toBe(429);
+  });
+});

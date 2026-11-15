@@ -39,7 +39,9 @@ const updatedAt = () => timestamp('updated_at').notNull().defaultNow().onUpdateN
 
 export const users = mysqlTable('users', {
   id: int('id').autoincrement().primaryKey(),
-  phone: varchar('phone', { length: 16 }).notNull().unique(),
+  phone: varchar('phone', { length: 16 }).unique(), // null for email/password staff
+  email: varchar('email', { length: 255 }).unique(), // staff/admin web console login
+  passwordHash: varchar('password_hash', { length: 255 }),
   firebaseUid: varchar('firebase_uid', { length: 128 }).unique(),
   name: varchar('name', { length: 80 }),
   rollNo: varchar('roll_no', { length: 32 }),

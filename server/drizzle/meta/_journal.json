@@ -8,6 +8,13 @@
       "when": 1793465646623,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1794733581292,
+      "tag": "0001_staff-email-password",
+      "breakpoints": true
     }
   ]
 }

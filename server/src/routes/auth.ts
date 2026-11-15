@@ -6,9 +6,15 @@ import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { userDto } from '../lib/dto.js';
 import { verifyPhoneToken } from '../lib/firebase.js';
-import { notFound } from '../lib/errors.js';
+import { forbidden, notFound, unauthorized } from '../lib/errors.js';
+import { verifyPassword } from '../lib/password.js';
+import { rateLimit, rateLimitReset } from '../lib/rate-limit.js';
 
 const loginBody = z.object({ idToken: z.string().min(1) });
+const passwordLoginBody = z.object({
+  email: z.string().trim().toLowerCase().email().max(255),
+  password: z.string().min(1).max(200),
+});
 const profileBody = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   rollNo: z.string().trim().max(32).nullable().optional(),
@@ -34,6 +40,23 @@ const routes: FastifyPluginAsync = async (app) => {
       [user] = await db.select().from(users).where(eq(users.id, user.id));
     }
 
+    const token = app.jwt.sign({ sub: user.id, role: user.role });
+    return { token, user: userDto(user) };
+  });
+
+  /** Staff/admin web console login with email + password. Students must use phone OTP. */
+  app.post('/auth/password-login', async (req) => {
+    const { email, password } = passwordLoginBody.parse(req.body);
+    const key = `pw:${req.ip}:${email}`;
+    rateLimit(key, 5, 60_000);
+
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const ok = await verifyPassword(password, user?.passwordHash ?? null);
+    if (!user || !ok) throw unauthorized('Wrong email or password');
+    if (user.role === 'student') throw forbidden('This login is for canteen staff');
+    if (user.isBlocked) throw forbidden('This account is blocked');
+
+    rateLimitReset(key);
     const token = app.jwt.sign({ sub: user.id, role: user.role });
     return { token, user: userDto(user) };
   });

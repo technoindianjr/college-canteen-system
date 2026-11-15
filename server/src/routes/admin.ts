@@ -10,7 +10,8 @@ import { config } from '../config.js';
 import { db, pool } from '../db/index.js';
 import { categories, comboItems, combos, dailySpecials, menuItems, orders, users } from '../db/schema.js';
 import { menuItemDto, userDto } from '../lib/dto.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { hashPassword } from '../lib/password.js';
 import { loadOrders } from '../lib/orders.js';
 import { realtime } from '../lib/realtime.js';
 import { DEFAULT_SETTINGS, getSettings, setSetting, type SettingKey } from '../lib/settings.js';
@@ -62,6 +63,7 @@ const userPatch = z.object({
   role: z.enum(['student', 'staff', 'admin']).optional(),
   isBlocked: z.boolean().optional(),
   resetNoShows: z.boolean().optional(),
+  password: z.string().min(8).max(200).optional(), // reset a staff member's console password
 });
 
 const settingsBody = z
@@ -214,7 +216,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .object({ q: z.string().trim().optional(), role: z.enum(['student', 'staff', 'admin']).optional(), blocked: z.enum(['true', 'false']).optional() })
       .parse(req.query);
     const conds = [];
-    if (q.q) conds.push(or(like(users.phone, `%${q.q}%`), like(users.name, `%${q.q}%`), like(users.rollNo, `%${q.q}%`)));
+    if (q.q) conds.push(or(like(users.phone, `%${q.q}%`), like(users.email, `%${q.q}%`), like(users.name, `%${q.q}%`), like(users.rollNo, `%${q.q}%`)));
     if (q.role) conds.push(eq(users.role, q.role));
     if (q.blocked) conds.push(eq(users.isBlocked, q.blocked === 'true'));
     const list = await db
@@ -224,6 +226,23 @@ const routes: FastifyPluginAsync = async (app) => {
       .orderBy(desc(users.createdAt))
       .limit(200);
     return list.map(userDto);
+  });
+
+  /** Create an email + password staff/admin account for the web console. */
+  app.post('/admin/users/staff', async (req, reply) => {
+    const b = z
+      .object({
+        email: z.string().trim().toLowerCase().email().max(255),
+        password: z.string().min(8).max(200),
+        name: z.string().trim().min(2).max(80),
+        role: z.enum(['staff', 'admin']).default('staff'),
+      })
+      .parse(req.body);
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, b.email));
+    if (existing) throw conflict('email_taken', 'An account with this email already exists');
+    await db.insert(users).values({ email: b.email, passwordHash: await hashPassword(b.password), name: b.name, role: b.role });
+    const [u] = await db.select().from(users).where(eq(users.email, b.email));
+    return reply.code(201).send(userDto(u));
   });
 
   /** Make someone staff/admin before they log in, by phone number. */
@@ -249,6 +268,7 @@ const routes: FastifyPluginAsync = async (app) => {
         ...(b.role ? { role: b.role } : {}),
         ...(b.isBlocked !== undefined ? { isBlocked: b.isBlocked } : {}),
         ...(b.resetNoShows ? { noShowCount: 0 } : {}),
+        ...(b.password ? { passwordHash: await hashPassword(b.password) } : {}),
       })
       .where(eq(users.id, id));
     const [u] = await db.select().from(users).where(eq(users.id, id));

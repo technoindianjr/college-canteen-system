@@ -32,7 +32,7 @@ export interface CartLine {
 type OrderRow = typeof orders.$inferSelect;
 type ItemRow = typeof orderItems.$inferSelect;
 
-export function toDto(o: OrderRow, items: ItemRow[], customer?: { name: string | null; rollNo: string | null; phone: string }) {
+export function toDto(o: OrderRow, items: ItemRow[], customer?: { name: string | null; rollNo: string | null; phone: string | null }) {
   return {
     id: o.id,
     userId: o.userId,

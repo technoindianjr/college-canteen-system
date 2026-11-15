@@ -54,6 +54,7 @@ npm run typecheck
 | --- | --- | --- | --- |
 | GET | `/health` | anyone | Uptime check (also checks MySQL) |
 | POST | `/auth/otp-login` | anyone | `{idToken}` → `{token, user}` |
+| POST | `/auth/password-login` | staff, admin | `{email, password}` → `{token, user}` (web console; rate-limited, students get 403) |
 | GET / PATCH | `/me` | logged in | Profile; PATCH `{name, rollNo, fcmToken}` (name required before ordering) |
 | GET | `/menu` | anyone | Categories with items, combos, popular ids, today's specials, ordering open/paused |
 | POST | `/orders` | student | `{items:[{menuItemId\|comboId, qty, note?}], note?}` → order with pickup code |
@@ -68,7 +69,8 @@ npm run typecheck
 | PATCH | `/staff/items/:id`, `/staff/combos/:id` | staff | `{isAvailable}` sold-out toggle |
 | POST | `/staff/pause` | staff | `{paused}` stop/resume app orders |
 | * | `/admin/categories`, `/admin/items`, `/admin/combos`, `/admin/specials` | admin | Menu management; `POST /admin/items/:id/image` (multipart `image`, ≤5 MB) |
-| GET / POST / PATCH | `/admin/users` | admin | Search, pre-register staff by phone, change role, block/unblock, reset no-shows |
+| GET / POST / PATCH | `/admin/users` | admin | Search, pre-register staff by phone, change role, block/unblock, reset no-shows, reset a console password (`{password}`) |
+| POST | `/admin/users/staff` | admin | `{email, password, name, role}` → create an email/password console account |
 | GET / PUT | `/admin/settings` | admin | Opening hours, limits, no-show rules |
 | GET | `/admin/orders?date=YYYY-MM-DD` | admin | All orders for a day |
 | GET | `/admin/reports/summary?from=&to=` | admin | Orders, revenue (cash vs UPI), top items, by hour/day, times, ratings |
@@ -100,9 +102,16 @@ npm ci && npm run build && npm run db:migrate && npm run db:seed
 cd .. && mkdir -p logs
 pm2 start deploy/ecosystem.config.cjs && pm2 save && pm2 startup   # follow the printed command
 
-# HTTPS: edit deploy/Caddyfile (your domain), then
+# Staff/admin web console (first admin comes from ADMIN_EMAIL + ADMIN_PASSWORD in .env, used by db:seed above)
+cd apps/web && npm ci && npm run build && cd ..
+
+# HTTPS: edit deploy/Caddyfile (your domains + the path to apps/web/dist), then
+caddy validate --config deploy/Caddyfile
+mkdir -p /opt/homebrew/var/log/caddy
 sudo cp deploy/Caddyfile /opt/homebrew/etc/Caddyfile && brew services start caddy
 ```
+
+The console runs on its own hostname (see `apps/web/README.md`); the Flutter app keeps using the API hostname.
 
 Also: System Settings → Energy → prevent sleep + "Start up automatically after a power failure"; macOS firewall on with only 80/443 open to the outside;
 nightly `deploy/backup.sh` via crontab; an uptime monitor on `https://<your-domain>/api/v1/health`.
