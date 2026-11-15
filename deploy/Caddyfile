@@ -2,6 +2,58 @@
 # Replace api.example.com with your real subdomain (A record -> the Mac's public IP).
 # Install: brew install caddy   Run: sudo caddy run --config deploy/Caddyfile  (or brew services, see server/README.md)
 
+# ---------------------------------------------------------------------------------------------
+# Staff + admin web console (apps/web). Build it first:  cd apps/web && npm ci && npm run build
+# The console uses relative URLs (/api/v1, /socket.io, /uploads), so this host serves the static
+# files AND proxies those paths to the API: same origin, no CORS settings needed.
+# Replace console.example.com (A record -> the Mac's public IP) and the root path below.
+# ---------------------------------------------------------------------------------------------
+console.example.com {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+	handle /uploads/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		root * /Users/CHANGE_ME/college-canteen-system/apps/web/dist
+		try_files {path} /index.html
+
+		# Hashed build files never change; index.html must always be re-checked after a deploy.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@html not path /assets/*
+		header @html Cache-Control "no-cache"
+
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://console.example.com; frame-ancestors 'none'"
+		-Server
+	}
+
+	log {
+		output file /opt/homebrew/var/log/caddy/console-access.log {
+			roll_size 10mb
+			roll_keep 10
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------------------------
+# API for the Flutter student app.
+# ---------------------------------------------------------------------------------------------
 api.example.com {
 	encode zstd gzip
 

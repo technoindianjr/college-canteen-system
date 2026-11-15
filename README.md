@@ -78,6 +78,13 @@ The design can be evaluated against these criteria:
 
 This repository currently documents the **Campus Canteen concept and its initial design chart**. The chart is a design/prototype concept, not a claim that a production application is already deployed.
 
+## Repository Layout
+
+- `apps/student_app` – Flutter student app (phone OTP login).
+- `apps/web` – staff and admin web console (React + Vite, email/password login). See `apps/web/README.md`.
+- `server` – Fastify + MySQL API and Socket.IO. See `server/README.md`.
+- `deploy` – Caddy, PM2 and backup config for the Mac mini.
+
 ## Contributing
 
 Suggestions and improvements are welcome. You can open an issue or submit a pull request with your ideas.
